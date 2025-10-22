@@ -1,11 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Spaceships Sightings Processing System'
 
-Parameters:
-  QueuePolicyPrincipalAccount:
-    Type: String
-    Description: 'AWS Account ID authorized to send messages to the SQS queue'
-
 Resources:
 
   # Queue
@@ -14,20 +9,6 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: spaceships-sightings
-
-  SpaceshipsQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref SpaceshipsQueue
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: !Sub arn:aws:iam::${QueuePolicyPrincipalAccount}:root
-            Action: sqs:SendMessage
-            Resource: !GetAtt SpaceshipsQueue.Arn
 
   # Tables
 

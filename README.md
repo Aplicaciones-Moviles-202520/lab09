@@ -121,7 +121,6 @@ El laboratorio se desarrollará en multiples desarrollos iterativos que irán co
 
 -   Ingresar a la consola de AWS
 -   Revisar que la región seleccionada sea `sa-east-1` (Sudamérica - São Paulo)
--   Desplegar la infraestructura base utilizando CloudFormation con el template `infrastructure.yaml`. Este template requiere del parámetro `QueuePolicyPrincipalAccount` que autorizará a un servicio externo a enviar mensajes a su cola SQS
 
 ## Desarrollo
 

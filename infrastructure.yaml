@@ -1,0 +1,291 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Spaceships Sightings Processing System'
+
+Parameters:
+  QueuePolicyPrincipalAccount:
+    Type: String
+    Description: 'AWS Account ID authorized to send messages to the SQS queue'
+
+Resources:
+
+  # Queue
+
+  SpaceshipsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: spaceships-sightings
+
+  SpaceshipsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref SpaceshipsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${QueuePolicyPrincipalAccount}:root
+            Action: sqs:SendMessage
+            Resource: !GetAtt SpaceshipsQueue.Arn
+
+  # Tables
+
+  SpaceshipsTableSightings:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: spaceships-sightings
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: spaceship_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+        - AttributeName: model
+          AttributeType: S
+      KeySchema:
+        - AttributeName: spaceship_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: model_index
+          KeySchema:
+            - AttributeName: model
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  SpaceshipsTableFalseReports:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: spaceships-false-reports
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: timestamp
+          KeyType: HASH
+
+  SpaceshipsTableCacheModel:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: spaceships-cache-model
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: model
+          AttributeType: S
+        - AttributeName: spaceship_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: model
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: spaceship_id_index
+          KeySchema:
+            - AttributeName: spaceship_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  SpaceshipsTableCacheStats:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: spaceships-cache-stats
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cache_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cache_key
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # Lambdas
+
+  SpaceshipsExecutionRoleConsumer:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  SpaceshipsFunctionConsumer:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: spaceships-consumer
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Role: !GetAtt SpaceshipsExecutionRoleConsumer.Arn
+      Code:
+        ZipFile: |
+          import json
+
+          def lambda_handler(event, context):
+
+              print(json.dumps(event, indent=4))
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Message processed successfully!')
+              }
+      Environment:
+        Variables:
+          SIGHTINGS_TABLE: !Ref SpaceshipsTableSightings
+          FALSE_REPORTS_TABLE: !Ref SpaceshipsTableFalseReports
+          MODEL_CACHE_TABLE: !Ref SpaceshipsTableCacheModel
+          VALIDATOR_API_URL: 'https://api.algundominio.link/spaceships/models/validator'
+
+  SpaceshipsExecutionRoleCalculate:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  SpaceshipsFunctionCalculate:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: spaceships-calculator
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Role: !GetAtt SpaceshipsExecutionRoleCalculate.Arn
+      Code:
+        ZipFile: |
+          import json
+
+          def lambda_handler(event, context):
+
+              print(json.dumps(event, indent=4))
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Message processed successfully!')
+              }
+      Environment:
+        Variables:
+          SIGHTINGS_TABLE: !Ref SpaceshipsTableSightings
+          STATS_CACHE_TABLE: !Ref SpaceshipsTableCacheStats
+
+  SpaceshipsExecutionRoleCounts:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  SpaceshipsFunctionCounts:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: spaceships-counts
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Role: !GetAtt SpaceshipsExecutionRoleCounts.Arn
+      Code:
+        ZipFile: |
+          import json
+
+          def lambda_handler(event, context):
+
+              print(json.dumps(event, indent=4))
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Message processed successfully!')
+              }
+      Environment:
+        Variables:
+          STATS_CACHE_TABLE: !Ref SpaceshipsTableCacheStats
+          CALCULATOR_FUNCTION: !Ref SpaceshipsFunctionCalculate
+
+  # API Gateway
+
+  SpaceshipsApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: spaceships-sightings-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: ['GET']
+        AllowHeaders: ['*']
+
+  SpaceshipsApiDefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref SpaceshipsApi
+      StageName: $default
+      AutoDeploy: true
+      Description: Default stage with auto-deploy
+
+  SpaceshipsIntegrationCalculate:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref SpaceshipsApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${SpaceshipsFunctionCalculate}
+      PayloadFormatVersion: "2.0"
+
+  SpaceshipsRouteCalculate:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SpaceshipsApi
+      RouteKey: GET /calculate
+      Target: !Sub integrations/${SpaceshipsIntegrationCalculate}
+    DependsOn: SpaceshipsIntegrationCalculate
+
+  SpaceshipsLambdaInvokePermissionCalculate:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SpaceshipsFunctionCalculate
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SpaceshipsApi}/*/GET/calculate
+
+  SpaceshipsIntegrationCounts:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref SpaceshipsApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${SpaceshipsFunctionCounts}
+      PayloadFormatVersion: "2.0"
+
+  SpaceshipsRouteCounts:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SpaceshipsApi
+      RouteKey: GET /counts
+      Target: !Sub integrations/${SpaceshipsIntegrationCounts}
+    DependsOn: SpaceshipsIntegrationCounts
+
+  SpaceshipsLambdaInvokePermissionCounts:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SpaceshipsFunctionCounts
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SpaceshipsApi}/*/GET/counts
